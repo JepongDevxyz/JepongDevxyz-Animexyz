@@ -83,7 +83,6 @@ function createRequestSignal(timeout, parentSignal) {
       state.timedOut = true;
       controller.abort(new Error('Request timed out'));
     }, timeout);
-    timer.unref?.();
   }
 
   return {
