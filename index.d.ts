@@ -43,6 +43,7 @@ export class AnimeXYZError extends Error {
     status?: number;
     details?: unknown;
     cause?: unknown;
+    provider?: string;
   });
 }
 

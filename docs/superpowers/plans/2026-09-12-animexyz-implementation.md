@@ -30,7 +30,7 @@
 This draft keeps the existing public AnimeXYZ methods and adds the provider flow below:
 
 - Niheaven (`https://nimeheaven.vercel.app/api/v1`) is the default primary for discovery, metadata, and episode stream routes.
-- Jikan (`https://api.jikan.moe/v4`) is the default metadata fallback for `info`, `home`, `newEpisodes`, `popular`, `search`, `fastSearch`, `season`, and `anime`.
+- Jikan (`https://api.jikan.moe/v4`) is the default metadata fallback for `home`, `newEpisodes`, `popular`, `search`, `fastSearch`, `season`, and `anime`; `info()` uses a local diagnostic fallback because Jikan has no equivalent service-info route.
 - `anime()` accepts a Niheaven ID, a MAL ID, or an object containing `niheavenId` and/or `malId`; response items keep those IDs in separate fields.
 - Request timeouts and caller cancellation are composed. Cancellation returns `ABORTED` and does not trigger the Jikan fallback; a failed fallback returns `FALLBACK_FAILED` with both error summaries.
 - The existing static website toast remains exactly `Powered by Jepong Devxyz` and still initializes on every page load.

@@ -134,14 +134,15 @@ function normalizeAnimeIdentifier(value) {
     niheavenId = requiredString(String(niheavenValue), 'niheavenId');
   }
   if (malValue !== undefined && malValue !== null) {
-    if (Number.isInteger(malValue) && malValue > 0) {
+    if (Number.isSafeInteger(malValue) && malValue > 0) {
       malId = malValue;
     } else {
       const normalized = requiredString(String(malValue), 'malId');
-      if (!/^\d+$/.test(normalized)) {
+      const numeric = Number(normalized);
+      if (!/^\d+$/.test(normalized) || !Number.isSafeInteger(numeric) || numeric < 1) {
         throw new TypeError('malId must be a positive integer');
       }
-      malId = Number(normalized);
+      malId = numeric;
     }
   }
 
@@ -247,6 +248,33 @@ class AnimeXYZ {
     }
   }
 
+  async awaitWithSignal(value, requestSignal, provider) {
+    if (!requestSignal.signal) return value;
+
+    let removeAbortListener = () => {};
+    const abortPromise = new Promise((_, reject) => {
+      const rejectOnAbort = () => reject(this.toRequestError(
+        requestSignal.signal.reason,
+        requestSignal.state,
+        provider,
+      ));
+
+      if (requestSignal.signal.aborted) {
+        rejectOnAbort();
+        return;
+      }
+
+      requestSignal.signal.addEventListener('abort', rejectOnAbort, { once: true });
+      removeAbortListener = () => requestSignal.signal.removeEventListener('abort', rejectOnAbort);
+    });
+
+    try {
+      return await Promise.race([value, abortPromise]);
+    } finally {
+      removeAbortListener();
+    }
+  }
+
   async requestAt(baseUrl, path, query = {}, options = {}, provider = 'custom') {
     if (typeof path !== 'string') throw new TypeError('path must be a string');
     const route = path.trim();
@@ -268,15 +296,23 @@ class AnimeXYZ {
     }
 
     try {
-      const response = await this.fetch(url, {
-        method: 'GET',
-        headers: { ...this.headers, ...(options.headers || {}) },
-        signal: requestSignal.signal,
-      });
+      const response = await this.awaitWithSignal(
+        Promise.resolve().then(() => this.fetch(url, {
+          method: 'GET',
+          headers: { ...this.headers, ...(options.headers || {}) },
+          signal: requestSignal.signal,
+        })),
+        requestSignal,
+        provider,
+      );
 
       let rawBody;
       try {
-        rawBody = await response.text();
+        rawBody = await this.awaitWithSignal(
+          Promise.resolve().then(() => response.text()),
+          requestSignal,
+          provider,
+        );
       } catch (error) {
         throw this.toRequestError(error, requestSignal.state, provider);
       }
@@ -357,22 +393,23 @@ class AnimeXYZ {
 
   info(options = {}) {
     if (this.mode === 'custom') return this.requestAt(this.baseUrl, 'info', {}, options, 'custom');
-    return this.withMetadataFallback(
-      () => this.requestAt(this.niheavenBaseUrl, 'info', {}, options, 'niheaven').then((value) => {
+    return this.requestAt(this.niheavenBaseUrl, 'info', {}, options, 'niheaven')
+      .then((value) => {
         const decorated = decorateMetadata(value, 'niheaven');
         return decorated && typeof decorated === 'object'
           ? { name: 'AnimeXYZ', version: '1.1.0', ...decorated }
           : decorated;
-      }),
-      () => Promise.resolve({
-        name: 'AnimeXYZ',
-        version: '1.1.0',
-        primary: 'Niheaven',
-        fallback: 'Jikan REST API v4',
-        baseUrl: this.niheavenBaseUrl,
-      }),
-      options,
-    );
+      })
+      .catch((primaryError) => {
+        if (!this.fallback || isCancellation(primaryError)) throw primaryError;
+        return decorateMetadata({
+          name: 'AnimeXYZ',
+          version: '1.1.0',
+          primary: 'Niheaven',
+          fallback: 'Jikan REST API v4 metadata methods',
+          baseUrl: this.niheavenBaseUrl,
+        }, 'local');
+      });
   }
 
   home(options = {}) {
@@ -446,7 +483,7 @@ class AnimeXYZ {
       return this.requestAt(this.baseUrl, 'anime/' + encodeURIComponent(routeId), {}, options, 'custom');
     }
 
-    const jikanId = identifier.malId ?? identifier.niheavenId;
+    const jikanId = identifier.malId;
     if (!identifier.niheavenId && identifier.malId !== null) {
       return this.requestAt(this.jikanBaseUrl, 'anime/' + encodeURIComponent(String(jikanId)) + '/full', {}, options, 'jikan')
         .then((value) => decorateMetadata(value, 'jikan', identifier));
@@ -454,7 +491,25 @@ class AnimeXYZ {
 
     return this.withMetadataFallback(
       () => this.requestAt(this.niheavenBaseUrl, 'anime/' + encodeURIComponent(identifier.niheavenId), {}, options, 'niheaven'),
-      () => this.requestAt(this.jikanBaseUrl, 'anime/' + encodeURIComponent(String(jikanId)) + '/full', {}, options, 'jikan'),
+      () => {
+        if (jikanId === null) {
+          throw new AnimeXYZError(
+            'Jikan detail fallback requires a malId when Niheaven lookup fails',
+            {
+              code: 'FALLBACK_UNAVAILABLE',
+              details: { requestedIds: identifier },
+              provider: 'jikan',
+            },
+          );
+        }
+        return this.requestAt(
+          this.jikanBaseUrl,
+          'anime/' + encodeURIComponent(String(jikanId)) + '/full',
+          {},
+          options,
+          'jikan',
+        );
+      },
       options,
       identifier,
     );
@@ -465,14 +520,41 @@ class AnimeXYZ {
     const episodeId = requiredString(String(episode), 'episode');
 
     if (this.streamProvider) {
+      const timeout = options.timeout === undefined ? this.timeout : options.timeout;
+      const requestSignal = createRequestSignal(timeout, options.signal);
+      if (requestSignal.state.cancelled) {
+        requestSignal.cleanup();
+        throw new AnimeXYZError('Request was cancelled', {
+          code: 'ABORTED',
+          cause: options.signal.reason,
+          provider: 'stream',
+        });
+      }
+
       try {
-        return await this.streamProvider({ id: animeId, episode: episodeId, options, client: this });
+        const providerOptions = { ...options, signal: requestSignal.signal };
+        return await this.awaitWithSignal(
+          Promise.resolve().then(() => this.streamProvider({
+            id: animeId,
+            episode: episodeId,
+            options: providerOptions,
+            client: this,
+          })),
+          requestSignal,
+          'stream',
+        );
       } catch (error) {
         if (error instanceof AnimeXYZError) throw error;
+        if (requestSignal.state.timedOut || requestSignal.state.cancelled || error?.name === 'AbortError') {
+          throw this.toRequestError(error, requestSignal.state, 'stream');
+        }
         throw new AnimeXYZError('Stream provider failed: ' + error.message, {
           code: 'STREAM_PROVIDER_ERROR',
           cause: error,
+          provider: 'stream',
         });
+      } finally {
+        requestSignal.cleanup();
       }
     }
 

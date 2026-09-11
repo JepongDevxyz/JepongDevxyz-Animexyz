@@ -69,7 +69,7 @@ new AnimeXYZ({
 
 AnimeXYZ will not hard-code Niheaven's private deployment as its required backend.
 
-For discovery and metadata, the client tries the configurable Niheaven endpoint first and falls back to the configurable Jikan REST API v4 endpoint. Supplying `baseUrl` keeps the existing single AnimeXYZ-compatible backend mode. The default upstream URLs remain configurable so the client can be pointed at a legal/public metadata service without changing the package API.
+For discovery and metadata, the client tries the configurable Niheaven endpoint first and falls back to the configurable Jikan REST API v4 endpoint. `info()` keeps a local diagnostic fallback because Jikan has no equivalent service-info route. Supplying `baseUrl` keeps the existing single AnimeXYZ-compatible backend mode. The default upstream URLs remain configurable so the client can be pointed at a legal/public metadata service without changing the package API.
 
 The package will not ship code intended to bypass access controls or extract unauthorized direct media URLs. Metadata responses expose separate `niheavenId` and `malId` fields plus a `source` marker.
 
@@ -127,6 +127,7 @@ Expected codes include:
 - `TIMEOUT`
 - `ABORTED`
 - `FALLBACK_FAILED`
+- `FALLBACK_UNAVAILABLE`
 - `HTTP_<status>`
 - `STREAM_PROVIDER_ERROR`
 

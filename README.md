@@ -95,12 +95,14 @@ const popular = await api.popular({ page: 1, limit: 10 });
 const results = await api.search('one piece', { page: 1, limit: 10 });
 ```
 
-Metadata responses include `source` and separate `niheavenId`/`malId` fields. List responses decorate each item in `results` or `data`; detail responses decorate the returned `data` object when the upstream uses a Jikan envelope.
+Metadata responses include `source` and separate `niheavenId`/`malId` fields. List responses decorate each item in `results` or `data`; detail responses decorate the returned `data` object when the upstream uses a Jikan envelope. For a detail request, pass both IDs when possible so a Niheaven failure can use the matching MAL ID for the Jikan fallback.
 
 ```js
-const detail = await api.anime({ niheavenId: 'nh-anime-id' });
+const detail = await api.anime({ niheavenId: 'nh-anime-id', malId: 20 });
 const malDetail = await api.anime({ malId: 20 });
 ```
+
+If a Niheaven-only detail request fails, AnimeXYZ does not send the Niheaven ID to Jikan as if it were a MAL ID; the combined error includes `FALLBACK_UNAVAILABLE` in its fallback details.
 
 ### `fastSearch(query, options)`
 
@@ -146,7 +148,7 @@ const api = new AnimeXYZ({
 const stream = await api.stream('20', 1);
 ```
 
-If the provider throws a regular error, AnimeXYZ wraps it in `AnimeXYZError` with code `STREAM_PROVIDER_ERROR`.
+The provider receives the composed `AbortSignal`, so the client timeout and caller cancellation also stop a provider that observes the signal. If the provider ignores the signal, AnimeXYZ still rejects at the configured deadline. A regular provider error is wrapped in `AnimeXYZError` with code `STREAM_PROVIDER_ERROR`.
 
 ## Custom AnimeXYZ-compatible backend
 
@@ -180,7 +182,7 @@ try {
 }
 ```
 
-Common codes include `NETWORK_ERROR`, `TIMEOUT`, `ABORTED`, `HTTP_<status>`, `FALLBACK_FAILED`, and `STREAM_PROVIDER_ERROR`. A caller-provided `AbortSignal` cancels the active request and prevents metadata fallback.
+Common codes include `NETWORK_ERROR`, `TIMEOUT`, `ABORTED`, `HTTP_<status>`, `FALLBACK_FAILED`, `FALLBACK_UNAVAILABLE`, and `STREAM_PROVIDER_ERROR`. A caller-provided `AbortSignal` cancels the active request and prevents metadata fallback.
 
 ## TypeScript
 
