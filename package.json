@@ -1,0 +1,24 @@
+{
+  "name": "animexyz-api",
+  "version": "1.0.0",
+  "description": "AnimeXYZ API client by Jepong Devxyz",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs",
+      "require": "./index.js",
+      "default": "./index.mjs"
+    }
+  },
+  "files": ["index.js", "index.mjs", "index.d.ts", "README.md", "LICENSE"],
+  "scripts": {
+    "test": "node --test",
+    "pack:check": "npm pack --dry-run"
+  },
+  "keywords": ["anime", "anime-api", "animexyz", "api-client"],
+  "author": "Jepong Devxyz",
+  "license": "MIT",
+  "engines": { "node": ">=18" }
+}
