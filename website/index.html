@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="AnimeXYZ API client by Jepong Devxyz">
+  <meta name="theme-color" content="#0b1020">
+  <title>AnimeXYZ — Anime API Client</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="AnimeXYZ home">
+      <span class="brand-mark" aria-hidden="true">A</span>
+      <span>AnimeXYZ</span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href="#features">Features</a>
+      <a href="#usage">Usage</a>
+      <a href="#methods">Methods</a>
+      <a href="#providers">Providers</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow">Jepong Devxyz • Node.js 18+</p>
+        <h1 id="hero-title">AnimeXYZ API Client</h1>
+        <p class="lead">A clean Node.js client for anime discovery, metadata, and configurable authorized watch-provider links. CommonJS, ESM, and TypeScript-ready.</p>
+        <div class="actions">
+          <a class="button primary" href="#usage">Get Started</a>
+          <a class="button" href="https://github.com/JepongDevxyz/JepongDevxyz-Animexyz">View on GitHub</a>
+        </div>
+      </div>
+      <div class="hero-card" aria-label="Quick example">
+        <div class="code-title"><span></span><span></span><span></span><strong>quick-start.js</strong></div>
+        <pre><code>const AnimeXYZ = require('animexyz-api');
+
+const api = new AnimeXYZ();
+const results = await api.search('naruto', {
+  page: 1,
+  limit: 10
+});</code></pre>
+      </div>
+    </section>
+
+    <section id="features" class="section" aria-labelledby="features-title">
+      <div class="section-heading">
+        <p class="eyebrow">Features</p>
+        <h2 id="features-title">Built for simple integration</h2>
+      </div>
+      <div class="grid">
+        <article class="card"><div class="icon">↔</div><h3>CommonJS + ESM</h3><p>Use <code>require</code> or <code>import</code> with the same API surface.</p></article>
+        <article class="card"><div class="icon">TS</div><h3>TypeScript Ready</h3><p>Type declarations ship with the package for editor hints and safer integrations.</p></article>
+        <article class="card"><div class="icon">✓</div><h3>Authorized Providers</h3><p>Keep provider logic injectable and separate from the core metadata client.</p></article>
+      </div>
+    </section>
+
+    <section id="usage" class="section two-column" aria-labelledby="usage-title">
+      <div class="section-copy">
+        <p class="eyebrow">Usage</p>
+        <h2 id="usage-title">Start with the public default backend</h2>
+        <p>AnimeXYZ uses Jikan REST API v4 for public anime metadata by default. You can also point it at an AnimeXYZ-compatible custom backend.</p>
+      </div>
+      <pre><code>import AnimeXYZ from 'animexyz-api';
+
+const api = new AnimeXYZ();
+const popular = await api.popular({
+  page: 1,
+  limit: 10
+});</code></pre>
+    </section>
+
+    <section id="methods" class="section" aria-labelledby="methods-title">
+      <div class="section-heading">
+        <p class="eyebrow">API</p>
+        <h2 id="methods-title">Available methods</h2>
+      </div>
+      <div class="method-list" aria-label="AnimeXYZ methods">
+        <code>info()</code><code>home()</code><code>newEpisodes()</code><code>popular()</code>
+        <code>search()</code><code>fastSearch()</code><code>season()</code><code>anime()</code><code>stream()</code>
+      </div>
+    </section>
+
+    <section id="providers" class="section two-column" aria-labelledby="providers-title">
+      <div class="section-copy">
+        <p class="eyebrow">Provider control</p>
+        <h2 id="providers-title">Bring your own authorized stream provider</h2>
+        <p>Pass a <code>streamProvider</code> function when your app already has a legitimate provider integration. Without one, the public default returns available platform links from the metadata backend.</p>
+      </div>
+      <pre><code>const api = new AnimeXYZ({
+  streamProvider: async ({ id, episode }) => ({
+    watchUrl: `https://your-provider.example/${id}/${episode}`
+  })
+});</code></pre>
+    </section>
+  </main>
+
+  <footer>
+    <strong>AnimeXYZ</strong>
+    <span>Powered by Jepong Devxyz</span>
+  </footer>
+
+  <div id="poweredToast" class="toast" role="status" aria-live="polite" aria-atomic="true">
+    <span class="toast-dot" aria-hidden="true"></span>
+    Powered by Jepong Devxyz
+  </div>
+  <script src="./app.js" defer></script>
+</body>
+</html>
