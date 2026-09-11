@@ -8,6 +8,8 @@ Repository: JepongDevxyz/JepongDevxyz-Animexyz
 
 Build a standalone Node.js anime API client/package named **AnimeXYZ** with a developer experience similar to the referenced Niheaven package while keeping AnimeXYZ independently branded and avoiding a hard dependency on Niheaven's API.
 
+The repository will also include a lightweight responsive demo/docs website for AnimeXYZ. The website is a presentation and usage layer only; it stays separate from the core package implementation.
+
 ## Scope
 
 The first release will provide:
@@ -24,6 +26,9 @@ The first release will provide:
 - GitHub Actions CI
 - README usage documentation
 - MIT license
+- responsive AnimeXYZ demo/docs website
+- modern mobile/desktop layout with no overlapping content
+- load toast that displays **Powered by Jepong Devxyz** on every fresh website open or reload
 
 ## Public API
 
@@ -116,6 +121,41 @@ Expected codes include:
 - `HTTP_<status>`
 - `STREAM_PROVIDER_ERROR`
 
+## Demo / Docs Website
+
+The `website/` directory will contain a static demo/docs site that can be hosted independently from the npm package.
+
+Initial website goals:
+
+- modern AnimeXYZ branding
+- responsive layout for phones, tablets, and desktop screens
+- no overlapping cards, navigation, buttons, or text
+- hero section explaining AnimeXYZ
+- feature/method overview
+- CommonJS and ESM usage snippets
+- package/API configuration examples
+- clear GitHub/package call-to-action areas
+- accessible buttons, focus states, and semantic HTML
+- small JavaScript footprint with no framework requirement for v1
+
+### Powered-by Toast
+
+Every fresh page open or reload will trigger a non-blocking toast with the exact text:
+
+`Powered by Jepong Devxyz`
+
+Toast behavior:
+
+- appears after page initialization
+- remains visible long enough to read
+- auto-dismisses after approximately 3 seconds
+- does not block navigation or user interaction
+- is positioned safely within the viewport on mobile and desktop
+- uses an accessible live region so screen readers can announce it without stealing focus
+- reappears on every new page load/reload rather than being permanently suppressed by local storage
+
+The toast is purely presentation logic and will not be part of the Node.js package runtime.
+
 ## Package Layout
 
 ```text
@@ -129,6 +169,10 @@ JepongDevxyz-Animexyz/
 │           └── 2026-09-12-animexyz-design.md
 ├── test/
 │   └── animexyz.test.js
+├── website/
+│   ├── index.html
+│   ├── styles.css
+│   └── app.js
 ├── LICENSE
 ├── README.md
 ├── index.d.ts
@@ -155,7 +199,7 @@ import AnimeXYZ, { AnimeXYZError } from 'animexyz-api';
 
 ## Testing Strategy
 
-Tests will avoid relying on live external services for correctness. They will inject a mock `fetch` implementation and verify:
+Package tests will avoid relying on live external services for correctness. They will inject a mock `fetch` implementation and verify:
 
 - constructor validation
 - URL and query construction
@@ -172,6 +216,14 @@ Tests will avoid relying on live external services for correctness. They will in
 - CommonJS exports
 - ESM exports
 
+Website verification will cover:
+
+- required website files exist
+- HTML references the local stylesheet and script correctly
+- the page contains the AnimeXYZ branding and documented examples
+- the `Powered by Jepong Devxyz` toast is initialized on page load
+- basic static checks confirm responsive viewport metadata and no missing local asset references
+
 The package will also run:
 
 ```bash
@@ -181,7 +233,7 @@ npm run pack:check
 
 ## Continuous Integration
 
-GitHub Actions will run on pushes and pull requests using supported Node.js versions. CI will install dependencies, run tests, and perform the package dry-run validation.
+GitHub Actions will run on pushes and pull requests using supported Node.js versions. CI will install dependencies, run tests, perform the package dry-run validation, and include static verification for the demo/docs website.
 
 ## README
 
@@ -197,6 +249,7 @@ The README will include:
 - error handling
 - TypeScript example
 - Node.js version requirement
+- demo/docs website location
 - license information
 
 ## Non-Goals for v1
@@ -206,16 +259,16 @@ The first release will not:
 - host or redistribute copyrighted video files
 - bypass DRM or access controls
 - depend on Niheaven's deployment as the permanent backend
-- include a web UI
 - include a database
 - include user accounts
-- publish to npm automatically
+- automatically publish to npm
+- require a frontend framework for the demo website
 
 ## Success Criteria
 
 The first implementation is complete when:
 
-1. all planned package files exist on `main`
+1. all planned package and website files exist on `main`
 2. `npm test` passes with zero test failures
 3. `npm run pack:check` succeeds
 4. CommonJS and ESM imports both work
@@ -223,3 +276,5 @@ The first implementation is complete when:
 6. README examples match the implemented methods
 7. CI configuration is valid and runs the same verification commands
 8. no package code is hard-dependent on Niheaven's API endpoint
+9. the demo/docs website renders responsively without overlapping content
+10. the website displays `Powered by Jepong Devxyz` on every fresh page open or reload and auto-dismisses without blocking interaction
