@@ -122,8 +122,10 @@ const season = await api.season('2026fall', { page: 1, limit: 10 });
 
 ### `anime(id)`
 
+String IDs are treated as Niheaven IDs, positive numeric IDs as MAL IDs, and identifier objects can carry either or both IDs.
+
 ```js
-const anime = await api.anime('20');
+const anime = await api.anime({ niheavenId: 'nh-anime-id', malId: 20 });
 ```
 
 ### `stream(id, episode)`
