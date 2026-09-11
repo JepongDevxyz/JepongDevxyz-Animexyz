@@ -91,6 +91,7 @@ test('empty query is rejected', () => {
 
 test('HTTP errors throw AnimeXYZError with status and code', async () => {
   const api = new AnimeXYZ({
+    fallback: false,
     fetch: async () => jsonResponse({ error: { code: 'NOT_FOUND', message: 'Missing' } }, 404),
   });
   await assert.rejects(
@@ -128,7 +129,7 @@ test('invalid timeout is rejected', () => {
   assert.throws(() => new AnimeXYZ({ timeout: -1 }), /timeout must be a non-negative number or false/);
 });
 
-test('default Jikan backend maps AnimeXYZ methods to supported public endpoints', async () => {
+test('default Niheaven backend maps AnimeXYZ methods and keeps Jikan as fallback', async () => {
   const recorder = createRecorder({ data: [] });
   const api = new AnimeXYZ({ fetch: recorder.fetch });
   const info = await api.info();
@@ -143,15 +144,111 @@ test('default Jikan backend maps AnimeXYZ methods to supported public endpoints'
   await api.stream('20', 1);
   const paths = recorder.calls.map(({ url }) => new URL(url).pathname);
   assert.deepEqual(paths, [
-    '/v4/seasons/now',
-    '/v4/schedules',
-    '/v4/top/anime',
-    '/v4/anime',
-    '/v4/anime',
-    '/v4/seasons/2026/fall',
-    '/v4/anime/20/full',
-    '/v4/anime/20/streaming',
+    '/api/v1/info',
+    '/api/v1/',
+    '/api/v1/new',
+    '/api/v1/popular',
+    '/api/v1/search',
+    '/api/v1/fastsearch',
+    '/api/v1/season/2026fall',
+    '/api/v1/anime/20',
+    '/api/v1/stream/20/1',
   ]);
+});
+
+test('uses Niheaven as the primary metadata provider and keeps provider IDs separate', async () => {
+  const calls = [];
+  const fetch = async (url) => {
+    calls.push(String(url));
+    return jsonResponse({ results: [{ id: 'nh-one-piece', title: 'One Piece' }] });
+  };
+  const api = new AnimeXYZ({ fetch });
+
+  const result = await api.search('one piece', { page: 1, limit: 10 });
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0], /^https:\/\/nimeheaven\.vercel\.app\/api\/v1\/search/);
+  assert.equal(result.source, 'niheaven');
+  assert.equal(result.results[0].niheavenId, 'nh-one-piece');
+  assert.equal(result.results[0].malId, null);
+  assert.deepEqual(result.results[0].ids, { niheaven: 'nh-one-piece', mal: null });
+});
+
+test('falls back to Jikan metadata after a Niheaven failure', async () => {
+  const calls = [];
+  const fetch = async (url) => {
+    const value = String(url);
+    calls.push(value);
+    if (value.startsWith('https://nimeheaven.vercel.app/')) {
+      return jsonResponse({ error: { code: 'UPSTREAM_DOWN', message: 'Niheaven unavailable' } }, 503);
+    }
+    return jsonResponse({ data: { mal_id: 20, title: 'Naruto' } });
+  };
+  const api = new AnimeXYZ({ fetch });
+
+  const result = await api.anime({ niheavenId: 'nh-naruto' });
+
+  assert.equal(calls.length, 2);
+  assert.match(calls[0], /^https:\/\/nimeheaven\.vercel\.app\/api\/v1\/anime/);
+  assert.match(calls[1], /^https:\/\/api\.jikan\.moe\/v4\/anime/);
+  assert.equal(result.source, 'jikan');
+  assert.equal(result.data.niheavenId, null);
+  assert.equal(result.data.malId, 20);
+  assert.deepEqual(result.data.ids, { niheaven: null, mal: 20 });
+  assert.deepEqual(result.requestedIds, { niheaven: 'nh-naruto', mal: null });
+});
+
+test('a MAL identifier uses Jikan directly and does not become a Niheaven identifier', async () => {
+  const calls = [];
+  const fetch = async (url) => {
+    calls.push(String(url));
+    return jsonResponse({ data: { mal_id: 20, title: 'Naruto' } });
+  };
+  const api = new AnimeXYZ({ fetch });
+
+  const result = await api.anime({ malId: 20 });
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0], /^https:\/\/api\.jikan\.moe\/v4\/anime\/20\/full$/);
+  assert.equal(result.source, 'jikan');
+  assert.equal(result.data.malId, 20);
+  assert.equal(result.data.niheavenId, null);
+});
+
+test('cancellation stops fallback and reports ABORTED', async () => {
+  const controller = new AbortController();
+  const calls = [];
+  const fetch = (url, options) => {
+    calls.push(String(url));
+    return new Promise((resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(Object.assign(new Error('cancelled'), { name: 'AbortError' })), { once: true });
+    });
+  };
+  const api = new AnimeXYZ({ fetch });
+  const pending = api.search('naruto', { signal: controller.signal });
+  controller.abort();
+
+  await assert.rejects(
+    pending,
+    (error) => error instanceof AnimeXYZError && error.code === 'ABORTED',
+  );
+  assert.equal(calls.length, 1);
+});
+
+test('request timeout reports TIMEOUT', async () => {
+  const fetch = (_url, options) => new Promise((resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(Object.assign(new Error('timed out'), { name: 'AbortError' })), { once: true });
+  });
+  const api = new AnimeXYZ({
+    baseUrl: 'https://example.test/api/v1',
+    timeout: 5,
+    fetch,
+  });
+
+  await assert.rejects(
+    () => api.info(),
+    (error) => error instanceof AnimeXYZError && error.code === 'TIMEOUT',
+  );
 });
 
 test('streamProvider receives normalized identifiers and client', async () => {

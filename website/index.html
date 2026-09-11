@@ -27,7 +27,7 @@
       <div class="hero-copy">
         <p class="eyebrow">Jepong Devxyz • Node.js 18+</p>
         <h1 id="hero-title">AnimeXYZ API Client</h1>
-        <p class="lead">A clean Node.js client for anime discovery, metadata, and configurable authorized watch-provider links. CommonJS, ESM, and TypeScript-ready.</p>
+        <p class="lead">A clean Node.js client with Niheaven-first discovery, Jikan metadata fallback, separate provider IDs, and configurable authorized watch-provider links. CommonJS, ESM, and TypeScript-ready.</p>
         <div class="actions">
           <a class="button primary" href="#usage">Get Started</a>
           <a class="button" href="https://github.com/JepongDevxyz/JepongDevxyz-Animexyz">View on GitHub</a>
@@ -53,7 +53,7 @@ const results = await api.search('naruto', {
       <div class="grid">
         <article class="card"><div class="icon">↔</div><h3>CommonJS + ESM</h3><p>Use <code>require</code> or <code>import</code> with the same API surface.</p></article>
         <article class="card"><div class="icon">TS</div><h3>TypeScript Ready</h3><p>Type declarations ship with the package for editor hints and safer integrations.</p></article>
-        <article class="card"><div class="icon">✓</div><h3>Authorized Providers</h3><p>Keep provider logic injectable and separate from the core metadata client.</p></article>
+        <article class="card"><div class="icon">✓</div><h3>Niheaven + Jikan</h3><p>Try Niheaven first, then fall back to Jikan metadata while keeping Niheaven and MAL IDs separate.</p></article>
       </div>
     </section>
 
@@ -61,7 +61,7 @@ const results = await api.search('naruto', {
       <div class="section-copy">
         <p class="eyebrow">Usage</p>
         <h2 id="usage-title">Start with the public default backend</h2>
-        <p>AnimeXYZ uses Jikan REST API v4 for public anime metadata by default. You can also point it at an AnimeXYZ-compatible custom backend.</p>
+        <p>AnimeXYZ tries Niheaven first for discovery and metadata, then uses Jikan REST API v4 when the primary request fails. You can also point it at an AnimeXYZ-compatible custom backend.</p>
       </div>
       <pre><code>import AnimeXYZ from 'animexyz-api';
 
@@ -69,7 +69,10 @@ const api = new AnimeXYZ();
 const popular = await api.popular({
   page: 1,
   limit: 10
-});</code></pre>
+});
+
+// result.source: "niheaven" or "jikan"
+// item.niheavenId and item.malId stay separate</code></pre>
     </section>
 
     <section id="methods" class="section" aria-labelledby="methods-title">

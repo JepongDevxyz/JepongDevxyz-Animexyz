@@ -18,10 +18,18 @@ export interface AnimeXYZStreamContext {
 
 export interface AnimeXYZOptions {
   baseUrl?: string;
+  niheavenBaseUrl?: string;
+  jikanBaseUrl?: string;
+  fallback?: boolean;
   timeout?: number | false;
   fetch?: typeof fetch;
   headers?: Record<string, string>;
   streamProvider?: (context: AnimeXYZStreamContext) => unknown | Promise<unknown>;
+}
+
+export interface AnimeXYZIdentifier {
+  niheavenId?: string;
+  malId?: number | string;
 }
 
 export class AnimeXYZError extends Error {
@@ -29,6 +37,7 @@ export class AnimeXYZError extends Error {
   status?: number;
   details?: unknown;
   cause?: unknown;
+  provider?: string;
   constructor(message: string, options?: {
     code?: string;
     status?: number;
@@ -39,6 +48,10 @@ export class AnimeXYZError extends Error {
 
 export class AnimeXYZ {
   baseUrl: string;
+  niheavenBaseUrl: string;
+  jikanBaseUrl: string;
+  mode: 'custom' | 'fallback';
+  fallback: boolean;
   timeout: number | false;
   fetch: typeof fetch;
   headers: Record<string, string>;
@@ -52,8 +65,8 @@ export class AnimeXYZ {
   search<T = unknown>(query: string, options?: AnimeXYZPaginationOptions): Promise<T>;
   fastSearch<T = unknown>(query: string, options?: AnimeXYZPaginationOptions): Promise<T>;
   season<T = unknown>(name: string, options?: AnimeXYZPaginationOptions): Promise<T>;
-  anime<T = unknown>(id: string, options?: AnimeXYZRequestOptions): Promise<T>;
-  stream<T = unknown>(id: string, episode: string | number, options?: AnimeXYZRequestOptions): Promise<T>;
+  anime<T = unknown>(id: string | number | AnimeXYZIdentifier, options?: AnimeXYZRequestOptions): Promise<T>;
+  stream<T = unknown>(id: string | AnimeXYZIdentifier, episode: string | number, options?: AnimeXYZRequestOptions): Promise<T>;
 }
 
 export default AnimeXYZ;

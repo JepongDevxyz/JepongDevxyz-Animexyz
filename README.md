@@ -2,7 +2,7 @@
 
 AnimeXYZ is a Node.js 18+ anime API client by **Jepong Devxyz**. It supports CommonJS, ESM, TypeScript declarations, configurable request settings, and an optional authorized `streamProvider` integration.
 
-By default, AnimeXYZ maps its metadata methods to the public Jikan REST API v4. If you pass a custom `baseUrl`, the client switches to the AnimeXYZ-compatible route contract documented below.
+By default, AnimeXYZ tries the Niheaven API first and falls back to Jikan REST API v4 for metadata when the primary request fails. If you pass a custom `baseUrl`, the client switches to the AnimeXYZ-compatible route contract documented below.
 
 ## Installation
 
@@ -34,8 +34,10 @@ console.log(popular);
 
 ```js
 const api = new AnimeXYZ({
-  baseUrl: 'https://your-api.example/v1',
+  niheavenBaseUrl: 'https://nimeheaven.vercel.app/api/v1',
+  jikanBaseUrl: 'https://api.jikan.moe/v4',
   timeout: 15000,
+  fallback: true,
   headers: {
     'X-App': 'my-anime-app',
   },
@@ -44,7 +46,10 @@ const api = new AnimeXYZ({
 
 Available options:
 
-- `baseUrl` — optional AnimeXYZ-compatible backend. If omitted, Jikan REST API v4 is used for metadata.
+- `baseUrl` — optional AnimeXYZ-compatible backend. Supplying it enables the legacy single-backend route contract.
+- `niheavenBaseUrl` — Niheaven primary endpoint; defaults to `https://nimeheaven.vercel.app/api/v1`.
+- `jikanBaseUrl` — Jikan metadata fallback endpoint; defaults to `https://api.jikan.moe/v4`.
+- `fallback` — set to `false` to return the Niheaven error without trying Jikan.
 - `timeout` — request timeout in milliseconds, or `false` to disable the built-in timeout.
 - `fetch` — custom fetch implementation, useful for tests or alternate runtimes.
 - `headers` — headers included with every request.
@@ -54,7 +59,7 @@ Available options:
 
 ### `info()`
 
-Returns local AnimeXYZ/backend information when using the default Jikan backend. With a custom backend it requests `/info`.
+Returns AnimeXYZ/provider information. With a custom backend it requests `/info`.
 
 ```js
 const info = await api.info();
@@ -62,7 +67,7 @@ const info = await api.info();
 
 ### `home(options)`
 
-Returns the current-season listing on the default backend.
+Returns the current-season listing from Niheaven, with Jikan metadata fallback.
 
 ```js
 const home = await api.home({ page: 1, limit: 10 });
@@ -70,7 +75,7 @@ const home = await api.home({ page: 1, limit: 10 });
 
 ### `newEpisodes(options)`
 
-Returns the current airing schedule on the default backend.
+Returns the current airing schedule from Niheaven, with Jikan metadata fallback.
 
 ```js
 const schedule = await api.newEpisodes({ page: 1, limit: 10 });
@@ -78,7 +83,7 @@ const schedule = await api.newEpisodes({ page: 1, limit: 10 });
 
 ### `popular(options)`
 
-Returns top anime on the default backend.
+Returns top anime from Niheaven, with Jikan metadata fallback.
 
 ```js
 const popular = await api.popular({ page: 1, limit: 10 });
@@ -88,6 +93,13 @@ const popular = await api.popular({ page: 1, limit: 10 });
 
 ```js
 const results = await api.search('one piece', { page: 1, limit: 10 });
+```
+
+Metadata responses include `source` and separate `niheavenId`/`malId` fields. List responses decorate each item in `results` or `data`; detail responses decorate the returned `data` object when the upstream uses a Jikan envelope.
+
+```js
+const detail = await api.anime({ niheavenId: 'nh-anime-id' });
+const malDetail = await api.anime({ malId: 20 });
 ```
 
 ### `fastSearch(query, options)`
@@ -114,10 +126,10 @@ const anime = await api.anime('20');
 
 ### `stream(id, episode)`
 
-With the default backend, this returns known streaming-platform links for the anime and includes `requestedEpisode` in the result. It does not bypass DRM or extract unauthorized direct media URLs.
+With the default backend, this calls Niheaven for the requested episode. It does not bypass DRM or extract unauthorized direct media URLs.
 
 ```js
-const providers = await api.stream('20', 1);
+const providers = await api.stream('nh-anime-id', 1);
 ```
 
 ## Custom stream provider
@@ -168,7 +180,7 @@ try {
 }
 ```
 
-Common codes include `NETWORK_ERROR`, `TIMEOUT`, `HTTP_<status>`, and `STREAM_PROVIDER_ERROR`.
+Common codes include `NETWORK_ERROR`, `TIMEOUT`, `ABORTED`, `HTTP_<status>`, `FALLBACK_FAILED`, and `STREAM_PROVIDER_ERROR`. A caller-provided `AbortSignal` cancels the active request and prevents metadata fallback.
 
 ## TypeScript
 
