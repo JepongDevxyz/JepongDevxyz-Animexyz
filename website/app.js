@@ -74,7 +74,8 @@ window.addEventListener('DOMContentLoaded', () => {
     setStatus('Choose a title and episode.');
   };
   const search = async (query, signal) => {
-    const url = new URL(`${String(config.apiBase || '').replace(/\/+$/, '')}/search`);
+    const apiBase = String(config.apiBase || '/api').replace(/\/+$/, '') || '/api';
+    const url = new URL(`${apiBase}/search`, window.location.origin);
     url.searchParams.set('q', query);
     url.searchParams.set('limit', '20');
     const response = await fetch(url, { signal, headers: { Accept: 'application/json' } });
