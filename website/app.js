@@ -6,7 +6,6 @@ window.addEventListener('DOMContentLoaded', () => {
     requestAnimationFrame(() => toast.classList.add('show'));
     window.setTimeout(() => toast.classList.remove('show'), 3000);
   }
-
   const config = window.ANIMEXYZ_CONFIG || {};
   const form = document.getElementById('searchForm');
   const queryInput = document.getElementById('searchQuery');
@@ -23,12 +22,17 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   let selected = null;
   let searchController = null;
-
   const setStatus = (message) => { status.textContent = message; };
   const itemsFrom = (value) => Array.isArray(value) ? value
     : (Array.isArray(value?.results) ? value.results : (Array.isArray(value?.data) ? value.data : []));
   const titleOf = (item) => item?.title || item?.name || item?.title_english || item?.englishTitle || 'Untitled anime';
   const idOf = (item) => item?.niheavenId || item?.niheaven_id || item?.id || item?.malId || item?.mal_id || null;
+  const officialLinksOf = (item) => (Array.isArray(item?.officialLinks) ? item.officialLinks : []).filter((link) => {
+    try {
+      const url = new URL(link?.url);
+      return url.protocol === 'https:' && !/(^|\.)youtube\.com$/i.test(url.hostname);
+    } catch { return false; }
+  });
   const episodesOf = (item) => {
     const episodes = item?.episodes || item?.episodeList || item?.data?.episodes;
     if (!Array.isArray(episodes)) return [];
@@ -48,7 +52,10 @@ window.addEventListener('DOMContentLoaded', () => {
     clearEpisodes();
     for (const episode of episodes) episodeSelect.add(new Option(episode.label, episode.id));
     episodeSelect.disabled = episodes.length === 0;
-    if (!episodes.length) setStatus('No episode list was provided by the backend.');
+    if (!episodes.length) {
+      const links = officialLinksOf(item);
+      setStatus(links.length ? 'Direct episodes are unavailable here. Open a verified official provider below.' : 'No episode list or verified official provider was supplied.');
+    }
   };
   const renderResults = (items) => {
     resultsList.replaceChildren();
@@ -68,6 +75,15 @@ window.addEventListener('DOMContentLoaded', () => {
       button.addEventListener('click', () => showEpisodes(item));
       const entry = document.createElement('li');
       entry.append(button);
+      for (const link of officialLinksOf(item)) {
+        const anchor = document.createElement('a');
+        anchor.className = 'official-result-link';
+        anchor.href = link.url;
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+        anchor.textContent = `Open on ${link.provider || 'official provider'}`;
+        entry.append(anchor);
+      }
       fragment.append(entry);
     }
     resultsList.append(fragment);
@@ -82,7 +98,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!response.ok) throw new Error(`Search failed with status ${response.status}`);
     return response.json();
   };
-
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const query = queryInput.value.trim();
@@ -90,9 +105,8 @@ window.addEventListener('DOMContentLoaded', () => {
     searchController?.abort();
     searchController = new AbortController();
     setStatus('Searching…');
-    try {
-      renderResults(itemsFrom(await search(query, searchController.signal)));
-    } catch (error) {
+    try { renderResults(itemsFrom(await search(query, searchController.signal))); }
+    catch (error) {
       if (error?.name === 'AbortError') return;
       resultsList.replaceChildren();
       clearEpisodes();

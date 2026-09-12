@@ -167,3 +167,6 @@ footer { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; p
   html { scroll-behavior: auto; }
   .toast { transition: none; }
 }
+
+.official-result-link { display: block; margin-top: .45rem; padding: .65rem .8rem; min-height: 44px; border: 1px solid var(--line); border-radius: 10px; color: #c7c0ff; font-weight: 750; text-decoration: none; overflow-wrap: anywhere; }
+.official-result-link:hover, .official-result-link:focus-visible { background: var(--panel-strong); }

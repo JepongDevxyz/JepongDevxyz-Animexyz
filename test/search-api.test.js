@@ -11,7 +11,15 @@ test('uses Kitsu when Niheaven is irrelevant and Jikan is unavailable', async ()
     calls.push({ url: String(url), options });
     if (calls.length === 1) return new Response(JSON.stringify({ results: [{ id: 'x', title: 'Overflow' }] }));
     if (calls.length === 2) return new Response('{}', { status: 504 });
-    return new Response(JSON.stringify({ data: [{ id: '11', attributes: { canonicalTitle: 'Naruto' } }] }));
+    return new Response(JSON.stringify({
+      data: [{ id: '11', attributes: { canonicalTitle: 'Naruto' }, relationships: { streamingLinks: { data: [
+        { type: 'streamingLinks', id: 'official-1' }, { type: 'streamingLinks', id: 'youtube-1' },
+      ] } } }],
+      included: [
+        { id: 'official-1', type: 'streamingLinks', attributes: { url: 'http://www.crunchyroll.com/naruto' } },
+        { id: 'youtube-1', type: 'streamingLinks', attributes: { url: 'https://www.youtube.com/watch?v=abc' } },
+      ],
+    }));
   };
   const state = {};
   const res = {
@@ -27,6 +35,8 @@ test('uses Kitsu when Niheaven is irrelevant and Jikan is unavailable', async ()
   assert.equal(state.status, 200);
   assert.equal(state.body.source, 'kitsu');
   assert.equal(state.body.data[0].title, 'Naruto');
+  assert.deepEqual(state.body.data[0].officialLinks, [{ provider: 'Crunchyroll', url: 'https://www.crunchyroll.com/naruto' }]);
   assert.equal(calls.length, 3);
   assert.equal(calls[2].options.headers.Accept, 'application/vnd.api+json');
+  assert.match(calls[2].url, /include=streamingLinks/);
 });
