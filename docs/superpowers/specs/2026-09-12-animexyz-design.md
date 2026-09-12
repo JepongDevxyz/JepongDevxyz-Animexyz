@@ -73,6 +73,8 @@ For discovery and metadata, the client tries the configurable Niheaven endpoint 
 
 The package will not ship code intended to bypass access controls or extract unauthorized direct media URLs. Metadata responses expose separate `niheavenId` and `malId` fields plus a `source` marker.
 
+For search methods, a non-empty Niheaven response must contain at least one title relevant to the normalized query. Otherwise the response is classified as `INVALID_PROVIDER_RESPONSE` and the client tries Jikan with safe-content filtering.
+
 `stream()` will use either:
 
 1. an explicitly configured `streamProvider` function supplied by the package user, or
@@ -128,6 +130,7 @@ Expected codes include:
 - `ABORTED`
 - `FALLBACK_FAILED`
 - `FALLBACK_UNAVAILABLE`
+- `INVALID_PROVIDER_RESPONSE`
 - `HTTP_<status>`
 - `STREAM_PROVIDER_ERROR`
 

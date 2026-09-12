@@ -49,6 +49,63 @@ function parseSeasonName(name) {
   return { year: match[1], season: match[2] };
 }
 
+function normalizeSearchText(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function searchResultItems(value) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.results)) return value.results;
+  if (Array.isArray(value?.data)) return value.data;
+  return null;
+}
+
+function searchResultTitles(item) {
+  if (!item || typeof item !== 'object') return [];
+  const titles = [
+    item.title,
+    item.name,
+    item.title_english,
+    item.title_japanese,
+    item.englishTitle,
+    item.japaneseTitle,
+  ];
+  if (Array.isArray(item.titles)) {
+    for (const title of item.titles) {
+      titles.push(typeof title === 'string' ? title : title?.title);
+    }
+  }
+  return titles.filter((title) => typeof title === 'string' && title.trim());
+}
+
+function validateNiheavenSearchResponse(value, query) {
+  const items = searchResultItems(value);
+  if (!items || items.length === 0) return value;
+
+  const normalizedQuery = normalizeSearchText(query);
+  if (normalizedQuery.length < 2) return value;
+  const queryTokens = normalizedQuery.split(' ').filter(Boolean);
+  const isRelevant = items.some((item) => searchResultTitles(item).some((title) => {
+    const normalizedTitle = normalizeSearchText(title);
+    return normalizedTitle.includes(normalizedQuery)
+      || queryTokens.every((token) => normalizedTitle.includes(token));
+  }));
+
+  if (!isRelevant) {
+    throw new AnimeXYZError('Niheaven returned results unrelated to the search query', {
+      code: 'INVALID_PROVIDER_RESPONSE',
+      details: { query, resultCount: items.length },
+      provider: 'niheaven',
+    });
+  }
+  return value;
+}
+
 function createRequestSignal(timeout, parentSignal) {
   const hasTimeout = timeout !== undefined && timeout !== false;
   if (!hasTimeout && !parentSignal) {
@@ -446,8 +503,9 @@ class AnimeXYZ {
     const params = { q: requiredString(query, 'query'), ...paginationParams(options) };
     if (this.mode === 'custom') return this.requestAt(this.baseUrl, 'search', params, options, 'custom');
     return this.withMetadataFallback(
-      () => this.requestAt(this.niheavenBaseUrl, 'search', params, options, 'niheaven'),
-      () => this.requestAt(this.jikanBaseUrl, 'anime', params, options, 'jikan'),
+      () => this.requestAt(this.niheavenBaseUrl, 'search', params, options, 'niheaven')
+        .then((value) => validateNiheavenSearchResponse(value, params.q)),
+      () => this.requestAt(this.jikanBaseUrl, 'anime', { ...params, sfw: true }, options, 'jikan'),
       options,
     );
   }
@@ -456,8 +514,9 @@ class AnimeXYZ {
     const params = { q: requiredString(query, 'query'), ...paginationParams(options) };
     if (this.mode === 'custom') return this.requestAt(this.baseUrl, 'fastsearch', params, options, 'custom');
     return this.withMetadataFallback(
-      () => this.requestAt(this.niheavenBaseUrl, 'fastsearch', params, options, 'niheaven'),
-      () => this.requestAt(this.jikanBaseUrl, 'anime', params, options, 'jikan'),
+      () => this.requestAt(this.niheavenBaseUrl, 'fastsearch', params, options, 'niheaven')
+        .then((value) => validateNiheavenSearchResponse(value, params.q)),
+      () => this.requestAt(this.jikanBaseUrl, 'anime', { ...params, sfw: true }, options, 'jikan'),
       options,
     );
   }

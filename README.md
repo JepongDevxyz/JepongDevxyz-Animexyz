@@ -95,6 +95,8 @@ const popular = await api.popular({ page: 1, limit: 10 });
 const results = await api.search('one piece', { page: 1, limit: 10 });
 ```
 
+AnimeXYZ checks that a non-empty Niheaven result contains a title relevant to the query. An unrelated successful response is treated as `INVALID_PROVIDER_RESPONSE` and falls back to Jikan. Jikan search fallback requests use its safe-content filter.
+
 Metadata responses include `source` and separate `niheavenId`/`malId` fields. List responses decorate each item in `results` or `data`; detail responses decorate the returned `data` object when the upstream uses a Jikan envelope. For a detail request, pass both IDs when possible so a Niheaven failure can use the matching MAL ID for the Jikan fallback.
 
 ```js
@@ -184,7 +186,7 @@ try {
 }
 ```
 
-Common codes include `NETWORK_ERROR`, `TIMEOUT`, `ABORTED`, `HTTP_<status>`, `FALLBACK_FAILED`, `FALLBACK_UNAVAILABLE`, and `STREAM_PROVIDER_ERROR`. A caller-provided `AbortSignal` cancels the active request and prevents metadata fallback.
+Common codes include `NETWORK_ERROR`, `TIMEOUT`, `ABORTED`, `HTTP_<status>`, `INVALID_PROVIDER_RESPONSE`, `FALLBACK_FAILED`, `FALLBACK_UNAVAILABLE`, and `STREAM_PROVIDER_ERROR`. A caller-provided `AbortSignal` cancels the active request and prevents metadata fallback.
 
 ## TypeScript
 

@@ -190,6 +190,43 @@ test('uses Niheaven as the primary metadata provider and keeps provider IDs sepa
   assert.deepEqual(result.results[0].ids, { niheaven: 'nh-one-piece', mal: null });
 });
 
+test('search falls back to Jikan when Niheaven returns unrelated results', async () => {
+  const calls = [];
+  const fetch = async (url) => {
+    const value = String(url);
+    calls.push(value);
+    if (value.startsWith('https://nimeheaven.vercel.app/')) {
+      return jsonResponse({
+        query: 'naruto',
+        results: [{ id: 'nh-unrelated', title: 'Unrelated Show' }],
+      });
+    }
+    return jsonResponse({ data: [{ mal_id: 20, title: 'Naruto' }] });
+  };
+  const api = new AnimeXYZ({ fetch });
+
+  const result = await api.search('naruto', { limit: 1 });
+
+  assert.equal(calls.length, 2);
+  assert.match(calls[0], /^https:\/\/nimeheaven\.vercel\.app\/api\/v1\/search/);
+  assert.match(calls[1], /^https:\/\/api\.jikan\.moe\/v4\/anime/);
+  assert.equal(new URL(calls[1]).searchParams.get('sfw'), 'true');
+  assert.equal(result.source, 'jikan');
+  assert.equal(result.data[0].title, 'Naruto');
+  assert.equal(result.data[0].malId, 20);
+});
+
+test('fastSearch keeps a relevant partial-title result from Niheaven', async () => {
+  const recorder = createRecorder({ results: [{ id: 'nh-naruto', title: 'Naruto Shippuden' }] });
+  const api = new AnimeXYZ({ fetch: recorder.fetch });
+
+  const result = await api.fastSearch('nar');
+
+  assert.equal(recorder.calls.length, 1);
+  assert.equal(result.source, 'niheaven');
+  assert.equal(result.results[0].niheavenId, 'nh-naruto');
+});
+
 test('falls back to Jikan metadata after a Niheaven failure', async () => {
   const calls = [];
   const fetch = async (url) => {
