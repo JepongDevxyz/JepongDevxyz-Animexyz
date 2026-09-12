@@ -54,6 +54,7 @@ Available options:
 - `fetch` — custom fetch implementation, useful for tests or alternate runtimes.
 - `headers` — headers included with every request.
 - `streamProvider` — optional function for an authorized watch-provider integration.
+- `allowedEmbedHosts` — hostnames allowed for authorized `embed` playback sources.
 
 ## Available methods
 
@@ -132,10 +133,15 @@ const anime = await api.anime({ niheavenId: 'nh-anime-id', malId: 20 });
 
 ### `stream(id, episode)`
 
-With the default backend, this calls Niheaven for the requested episode. It does not bypass DRM or extract unauthorized direct media URLs.
+With an explicit authorized `streamProvider` or custom backend, this returns a normalized playback result. Supported playback types are `mp4`, browser-native `hls`, and allowlisted `embed`. Default Niheaven direct media responses are not treated as authorized playback; they must provide an official external or trailer fallback.
 
 ```js
 const providers = await api.stream('nh-anime-id', 1);
+if (providers.playable) {
+  console.log(providers.playback.type, providers.playback.url);
+} else {
+  console.log(providers.fallback.label, providers.fallback.url);
+}
 ```
 
 ## Custom stream provider
@@ -144,8 +150,11 @@ Use `streamProvider` when your application already has an authorized provider in
 
 ```js
 const api = new AnimeXYZ({
+  allowedEmbedHosts: ['player.example'],
   streamProvider: async ({ id, episode }) => ({
-    watchUrl: `https://your-authorized-provider.example/watch/${id}/${episode}`,
+    source: 'authorized-provider',
+    type: 'mp4',
+    url: `https://media.your-authorized-provider.example/${id}/${episode}.mp4`,
   }),
 });
 
@@ -186,7 +195,7 @@ try {
 }
 ```
 
-Common codes include `NETWORK_ERROR`, `TIMEOUT`, `ABORTED`, `HTTP_<status>`, `INVALID_PROVIDER_RESPONSE`, `FALLBACK_FAILED`, `FALLBACK_UNAVAILABLE`, and `STREAM_PROVIDER_ERROR`. A caller-provided `AbortSignal` cancels the active request and prevents metadata fallback.
+Common codes include `NETWORK_ERROR`, `TIMEOUT`, `ABORTED`, `HTTP_<status>`, `INVALID_PROVIDER_RESPONSE`, `INVALID_STREAM_RESPONSE`, `STREAM_UNAVAILABLE`, `FALLBACK_FAILED`, `FALLBACK_UNAVAILABLE`, and `STREAM_PROVIDER_ERROR`. A caller-provided `AbortSignal` cancels the active request and prevents metadata fallback.
 
 ## TypeScript
 
@@ -199,7 +208,7 @@ const results = await api.search('naruto', { page: 1, limit: 10 });
 
 ## Demo website
 
-A framework-free responsive demo/docs website lives in `website/`.
+A framework-free responsive demo/player website lives in `website/`. Configure `window.ANIMEXYZ_CONFIG.apiBase` for an AnimeXYZ-compatible backend. The player attaches media only after HTTPS, source-type, and embed-host validation. Browsers without native HLS support receive an official-link fallback or a clear error.
 
 Opening or reloading the page displays the toast:
 

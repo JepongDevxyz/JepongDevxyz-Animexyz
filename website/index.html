@@ -16,6 +16,7 @@
     </a>
     <nav aria-label="Primary navigation">
       <a href="#features">Features</a>
+      <a href="#player">Player</a>
       <a href="#usage">Usage</a>
       <a href="#methods">Methods</a>
       <a href="#providers">Providers</a>
@@ -42,6 +43,47 @@ const results = await api.search('naruto', {
   page: 1,
   limit: 10
 });</code></pre>
+      </div>
+    </section>
+
+    <section id="player" class="section" aria-labelledby="player-title">
+      <div class="section-heading">
+        <p class="eyebrow">Authorized playback</p>
+        <h2 id="player-title">Find an episode</h2>
+        <p>Search the configured AnimeXYZ backend. Playback appears only when an authorized provider returns a validated source.</p>
+      </div>
+
+      <form id="searchForm" role="search">
+        <label for="searchQuery">Anime title</label>
+        <input id="searchQuery" name="q" type="search" autocomplete="off" required>
+        <button type="submit">Search</button>
+      </form>
+
+      <p id="playerStatus" role="status" aria-live="polite" aria-atomic="true">Choose a title and episode.</p>
+      <ul id="searchResults" aria-label="Anime search results"></ul>
+
+      <div id="episodeControls">
+        <label for="episodeSelect">Episode</label>
+        <select id="episodeSelect" disabled>
+          <option value="">Select an episode</option>
+        </select>
+      </div>
+
+      <div id="playerSurface" aria-label="Episode player">
+        <video id="animeVideo" controls preload="metadata" hidden></video>
+        <iframe
+          id="animeEmbed"
+          title="Authorized episode player"
+          sandbox="allow-scripts allow-presentation"
+          referrerpolicy="no-referrer"
+          allow="fullscreen"
+          hidden
+        ></iframe>
+      </div>
+
+      <div id="playerActions">
+        <a id="officialFallback" target="_blank" rel="noopener noreferrer" hidden></a>
+        <button id="playerRetry" type="button" hidden>Retry playback</button>
       </div>
     </section>
 
@@ -109,6 +151,14 @@ const popular = await api.popular({
     <span class="toast-dot" aria-hidden="true"></span>
     Powered by Jepong Devxyz
   </div>
+  <script>
+    window.ANIMEXYZ_CONFIG = window.ANIMEXYZ_CONFIG || {
+      apiBase: 'https://nimeheaven.vercel.app/api/v1',
+      allowedEmbedHosts: [],
+      timeout: 15000
+    };
+  </script>
+  <script src="./player.js" defer></script>
   <script src="./app.js" defer></script>
 </body>
 </html>

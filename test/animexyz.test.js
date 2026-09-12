@@ -6,7 +6,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 
 const AnimeXYZ = require('../index.js');
-const { AnimeXYZError } = require('../index.js');
+const { AnimeXYZError, normalizePlaybackResult } = require('../index.js');
 
 test('CommonJS exports AnimeXYZ and AnimeXYZError', () => {
   assert.equal(typeof AnimeXYZ, 'function');
@@ -62,7 +62,11 @@ test('search builds encoded query and pagination', async () => {
 });
 
 test('method routes match the AnimeXYZ contract', async () => {
-  const recorder = createRecorder({ ok: true });
+  const recorder = createRecorder({
+    source: 'test-backend',
+    type: 'external',
+    url: 'https://official.example/watch',
+  });
   const api = new AnimeXYZ({ baseUrl: 'https://example.test/api/v1', fetch: recorder.fetch });
   await api.info();
   await api.home({ page: 1 });
@@ -130,7 +134,11 @@ test('invalid timeout is rejected', () => {
 });
 
 test('default Niheaven backend maps AnimeXYZ methods and keeps Jikan as fallback', async () => {
-  const recorder = createRecorder({ data: [] });
+  const recorder = createRecorder({
+    source: 'test-backend',
+    type: 'external',
+    url: 'https://official.example/watch',
+  });
   const api = new AnimeXYZ({ fetch: recorder.fetch });
   const info = await api.info();
   assert.equal(info.name, 'AnimeXYZ');
@@ -352,11 +360,293 @@ test('streamProvider receives normalized identifiers and client', async () => {
     },
   });
   const result = await api.stream(' abc ', 12);
-  assert.deepEqual(result, { watchUrl: 'https://legal.example/watch/1' });
+  assert.deepEqual(result, {
+    playable: false,
+    source: 'stream-provider',
+    playback: null,
+    fallback: {
+      type: 'external',
+      url: 'https://legal.example/watch/1',
+      label: 'Watch on official provider',
+    },
+  });
   assert.equal(received.id, 'abc');
   assert.equal(received.episode, '12');
   assert.equal(received.client, api);
 });
+
+test('normalizes an authorized MP4 provider response', async () => {
+  const api = new AnimeXYZ({
+    fetch: async () => jsonResponse({}),
+    streamProvider: async () => ({ source: 'licensed', type: 'mp4', url: 'https://media.example/ep1.mp4' }),
+  });
+  assert.deepEqual(await api.stream('show', 1), {
+    playable: true,
+    source: 'licensed',
+    playback: { type: 'mp4', url: 'https://media.example/ep1.mp4', title: null },
+    fallback: null,
+  });
+});
+
+test('normalizes an authorized HLS provider response', async () => {
+  const api = new AnimeXYZ({
+    fetch: async () => jsonResponse({}),
+    streamProvider: async () => ({
+      source: 'licensed',
+      type: 'hls',
+      url: 'https://media.example/ep1.m3u8',
+      title: 'Episode 1',
+    }),
+  });
+  assert.deepEqual(await api.stream('show', 1), {
+    playable: true,
+    source: 'licensed',
+    playback: { type: 'hls', url: 'https://media.example/ep1.m3u8', title: 'Episode 1' },
+    fallback: null,
+  });
+});
+
+test('normalizes official external and trailer responses as fallbacks', () => {
+  assert.deepEqual(normalizePlaybackResult({
+    source: 'metadata',
+    type: 'external',
+    url: 'https://official.example/title',
+    label: 'Watch on official provider',
+  }), {
+    playable: false,
+    source: 'metadata',
+    playback: null,
+    fallback: {
+      type: 'external',
+      url: 'https://official.example/title',
+      label: 'Watch on official provider',
+    },
+  });
+  assert.deepEqual(normalizePlaybackResult({
+    source: 'metadata',
+    type: 'trailer',
+    url: 'https://official.example/trailer',
+  }), {
+    playable: false,
+    source: 'metadata',
+    playback: null,
+    fallback: {
+      type: 'trailer',
+      url: 'https://official.example/trailer',
+      label: 'Watch trailer',
+    },
+  });
+});
+
+test('normalizes embeds from an allowlisted host or its subdomains', async () => {
+  const api = new AnimeXYZ({
+    allowedEmbedHosts: ['PLAYER.EXAMPLE'],
+    fetch: async () => jsonResponse({}),
+    streamProvider: async () => ({
+      source: 'licensed',
+      type: 'embed',
+      url: 'https://cdn.player.example/embed/episode-1',
+    }),
+  });
+  assert.deepEqual(await api.stream('show', 1), {
+    playable: true,
+    source: 'licensed',
+    playback: { type: 'embed', url: 'https://cdn.player.example/embed/episode-1', title: null },
+    fallback: null,
+  });
+  assert.equal(normalizePlaybackResult(
+    { source: 'licensed', type: 'embed', url: 'https://player.example/embed/episode-1' },
+    { allowedEmbedHosts: ['player.example'] },
+  ).playable, true);
+});
+
+test('rejects non-HTTPS playback URLs with INVALID_STREAM_RESPONSE', () => {
+  for (const url of [
+    'http://media.example/ep1.mp4',
+    'javascript:alert(1)',
+    'data:video/mp4;base64,AAAA',
+    'blob:https://media.example/id',
+    'file:///episode.mp4',
+  ]) {
+    assert.throws(
+      () => normalizePlaybackResult({ source: 'licensed', type: 'mp4', url }),
+      (error) => error instanceof AnimeXYZError && error.code === 'INVALID_STREAM_RESPONSE',
+    );
+  }
+});
+
+test('rejects unknown stream types with INVALID_STREAM_RESPONSE', () => {
+  assert.throws(
+    () => normalizePlaybackResult({ source: 'licensed', type: 'dash', url: 'https://media.example/manifest.mpd' }),
+    (error) => error instanceof AnimeXYZError && error.code === 'INVALID_STREAM_RESPONSE',
+  );
+});
+
+test('rejects playback URLs containing credentials with INVALID_STREAM_RESPONSE', () => {
+  assert.throws(
+    () => normalizePlaybackResult({ source: 'licensed', type: 'mp4', url: 'https://user:secret@media.example/ep1.mp4' }),
+    (error) => error instanceof AnimeXYZError && error.code === 'INVALID_STREAM_RESPONSE',
+  );
+});
+
+test('rejects malformed stream responses with INVALID_STREAM_RESPONSE', () => {
+  for (const value of ['https://media.example/ep1.mp4', [], new Date(0), { type: 'mp4', url: 'not a URL' }]) {
+    assert.throws(
+      () => normalizePlaybackResult(value),
+      (error) => error instanceof AnimeXYZError && error.code === 'INVALID_STREAM_RESPONSE',
+    );
+  }
+});
+
+test('rejects unapproved embed hosts with INVALID_STREAM_RESPONSE', () => {
+  for (const url of [
+    'https://player.example/embed/1',
+    'https://evilplayer.example/embed/1',
+    'https://evilsafe.player.example/embed/1',
+  ]) {
+    assert.throws(
+      () => normalizePlaybackResult(
+        { source: 'licensed', type: 'embed', url },
+        { allowedEmbedHosts: ['safe.player.example'] },
+      ),
+      (error) => error instanceof AnimeXYZError && error.code === 'INVALID_STREAM_RESPONSE',
+    );
+  }
+});
+
+test('reports STREAM_UNAVAILABLE when no authorized source or fallback exists', () => {
+  for (const value of [null, undefined, {}]) {
+    assert.throws(
+      () => normalizePlaybackResult(value),
+      (error) => error instanceof AnimeXYZError && error.code === 'STREAM_UNAVAILABLE',
+    );
+  }
+});
+
+test('constructor rejects malformed embed host allowlists', () => {
+  for (const allowedEmbedHosts of ['player.example', [123], ['https://player.example/embed']]) {
+    assert.throws(
+      () => new AnimeXYZ({ fetch: async () => jsonResponse({}), allowedEmbedHosts }),
+      /allowedEmbedHosts/,
+    );
+  }
+});
+
+test('custom backend stream normalizes a valid authorized response', async () => {
+  const api = new AnimeXYZ({
+    baseUrl: 'https://api.example/v1',
+    fetch: async () => jsonResponse({
+      source: 'licensed-network',
+      type: 'mp4',
+      url: 'https://media.example/network-episode.mp4',
+    }),
+  });
+
+  assert.deepEqual(await api.stream('show', 1), {
+    playable: true,
+    source: 'licensed-network',
+    playback: {
+      type: 'mp4',
+      url: 'https://media.example/network-episode.mp4',
+      title: null,
+    },
+    fallback: null,
+  });
+});
+
+test('custom backend stream rejects unsafe HTTP and unapproved embed responses', async () => {
+  for (const body of [
+    { source: 'licensed-network', type: 'mp4', url: 'http://media.example/episode.mp4' },
+    { source: 'licensed-network', type: 'embed', url: 'https://unapproved.player.example/embed/1' },
+  ]) {
+    const api = new AnimeXYZ({
+      baseUrl: 'https://api.example/v1',
+      allowedEmbedHosts: ['safe.player.example'],
+      fetch: async () => jsonResponse(body),
+    });
+
+    await assert.rejects(
+      () => api.stream('show', 1),
+      (error) => error instanceof AnimeXYZError && error.code === 'INVALID_STREAM_RESPONSE',
+    );
+  }
+});
+
+test('default Niheaven stream rejects direct playable sources without explicit authorization', async () => {
+  for (const body of [
+    { source: 'niheaven', type: 'mp4', url: 'https://media.example/episode.mp4' },
+    { source: 'niheaven', type: 'hls', url: 'https://media.example/episode.m3u8' },
+    { source: 'niheaven', type: 'embed', url: 'https://safe.player.example/embed/1' },
+    { source: 'niheaven', type: 'mp4', url: 'http://media.example/episode.mp4' },
+  ]) {
+    const api = new AnimeXYZ({
+      allowedEmbedHosts: ['safe.player.example'],
+      fetch: async () => jsonResponse(body),
+    });
+
+    await assert.rejects(
+      () => api.stream('show', 1),
+      (error) => error instanceof AnimeXYZError && error.code === 'STREAM_UNAVAILABLE',
+    );
+  }
+});
+
+test('default Niheaven stream normalizes official external and trailer fallbacks', async () => {
+  for (const [body, expected] of [
+    [
+      { source: 'niheaven', type: 'external', url: 'https://official.example/watch', label: 'Official site' },
+      { type: 'external', url: 'https://official.example/watch', label: 'Official site' },
+    ],
+    [
+      { source: 'niheaven', type: 'trailer', url: 'https://official.example/trailer' },
+      { type: 'trailer', url: 'https://official.example/trailer', label: 'Watch trailer' },
+    ],
+  ]) {
+    const api = new AnimeXYZ({ fetch: async () => jsonResponse(body) });
+    assert.deepEqual(await api.stream('show', 1), {
+      playable: false,
+      source: 'niheaven',
+      playback: null,
+      fallback: expected,
+    });
+  }
+});
+
+test('default Niheaven stream rejects unsafe official fallback URLs', async () => {
+  const api = new AnimeXYZ({
+    fetch: async () => jsonResponse({
+      source: 'niheaven',
+      type: 'external',
+      url: 'http://official.example/watch',
+    }),
+  });
+  await assert.rejects(
+    () => api.stream('show', 1),
+    (error) => error instanceof AnimeXYZError && error.code === 'INVALID_STREAM_RESPONSE',
+  );
+});
+
+for (const networkMode of [
+  { name: 'custom backend', options: { baseUrl: 'https://api.example/v1' } },
+  { name: 'default Niheaven', options: {} },
+]) {
+  test(`${networkMode.name} stream rejects malformed and empty responses`, async () => {
+    for (const [body, expectedCode] of [
+      [['not', 'a', 'provider', 'object'], 'INVALID_STREAM_RESPONSE'],
+      [{}, 'STREAM_UNAVAILABLE'],
+    ]) {
+      const api = new AnimeXYZ({
+        ...networkMode.options,
+        fetch: async () => jsonResponse(body),
+      });
+
+      await assert.rejects(
+        () => api.stream('show', 1),
+        (error) => error instanceof AnimeXYZError && error.code === expectedCode,
+      );
+    }
+  });
+}
 
 test('streamProvider failures become STREAM_PROVIDER_ERROR', async () => {
   const api = new AnimeXYZ({
@@ -394,12 +684,13 @@ test('streamProvider timeout and cancellation are enforced', async () => {
   );
 });
 
-test('ESM exports default AnimeXYZ and named AnimeXYZError', async () => {
+test('ESM exports playback normalization with the client and error class', async () => {
   const modulePath = path.resolve(__dirname, '../index.mjs');
   const mod = await import(`file://${modulePath}`);
   assert.equal(typeof mod.default, 'function');
   assert.equal(typeof mod.AnimeXYZ, 'function');
   assert.equal(typeof mod.AnimeXYZError, 'function');
+  assert.equal(typeof mod.normalizePlaybackResult, 'function');
 });
 
 test('website files and required branding exist', () => {

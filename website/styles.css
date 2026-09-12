@@ -107,6 +107,21 @@ pre { margin: 0; padding: 1.1rem; overflow-x: auto; color: #e7e9f5; }
 .method-list { display: flex; flex-wrap: wrap; gap: .65rem; }
 .method-list code { padding: .6rem .75rem; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
 
+#searchForm { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: end; max-width: 760px; }
+#searchForm label, #episodeControls label { display: grid; gap: .35rem; color: var(--muted); font-weight: 700; }
+#searchQuery, #episodeSelect { min-height: 44px; padding: .7rem .8rem; border: 1px solid var(--line); border-radius: 10px; background: rgba(0, 0, 0, .2); color: var(--text); font: inherit; }
+#searchForm button, #playerRetry { min-height: 44px; padding: .7rem 1rem; border: 0; border-radius: 10px; background: #f7f8fb; color: #0b1020; font: inherit; font-weight: 800; cursor: pointer; }
+#playerStatus { min-height: 1.6rem; color: var(--muted); }
+#searchResults { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .75rem; padding: 0; list-style: none; }
+#searchResults li { min-width: 0; }
+.result-card { width: 100%; min-height: 54px; padding: .8rem; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text); text-align: left; font: inherit; font-weight: 700; cursor: pointer; }
+.result-card:hover, .result-card:focus-visible { background: var(--panel-strong); }
+#episodeControls { max-width: 360px; margin: 1rem 0; }
+#playerSurface { min-height: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: #05070f; aspect-ratio: 16 / 9; }
+#animeVideo, #animeEmbed { display: block; width: 100%; height: 100%; min-height: 280px; border: 0; background: #05070f; }
+#playerActions { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-top: 1rem; }
+#officialFallback { color: #c7c0ff; font-weight: 750; }
+
 footer { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; padding: 3rem 1rem; text-align: center; color: var(--muted); border-top: 1px solid var(--line); }
 .toast {
   position: fixed;
@@ -143,6 +158,9 @@ footer { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; p
   .site-header nav { width: 100%; gap: .55rem .85rem; }
   .hero h1 { font-size: clamp(2.75rem, 17vw, 4.5rem); }
   main { width: min(100% - 1.25rem, 1120px); }
+  #searchForm { grid-template-columns: 1fr; }
+  #searchForm button { width: 100%; }
+  #animeVideo, #animeEmbed { min-height: 200px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

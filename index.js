@@ -106,6 +106,137 @@ function validateNiheavenSearchResponse(value, query) {
   return value;
 }
 
+function normalizeAllowedEmbedHosts(value) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new TypeError('allowedEmbedHosts must be an array of hostnames');
+  }
+
+  return value.map((host) => {
+    if (typeof host !== 'string' || host.trim() === '') {
+      throw new TypeError('allowedEmbedHosts must contain only non-empty hostname strings');
+    }
+
+    const normalized = host.trim().toLowerCase();
+    let url;
+    try {
+      url = new URL('https://' + normalized);
+    } catch {
+      throw new TypeError('allowedEmbedHosts must contain only valid hostnames');
+    }
+    if (url.hostname !== normalized || url.port || url.pathname !== '/' || url.search || url.hash) {
+      throw new TypeError('allowedEmbedHosts must contain hostnames without schemes, ports, or paths');
+    }
+    return normalized;
+  });
+}
+
+function invalidStreamResponse(message, details) {
+  return new AnimeXYZError(message, {
+    code: 'INVALID_STREAM_RESPONSE',
+    details,
+    provider: 'stream',
+  });
+}
+
+function streamUnavailable(details) {
+  return new AnimeXYZError('No authorized stream or official fallback is available', {
+    code: 'STREAM_UNAVAILABLE',
+    details,
+    provider: 'stream',
+  });
+}
+
+function normalizePlaybackResult(value, options = {}) {
+  const isEmptyRecord = typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
+    && Object.keys(value).length === 0;
+  if (value === null || value === undefined
+      || isEmptyRecord) {
+    throw streamUnavailable();
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw invalidStreamResponse('Stream provider must return an object', { value });
+  }
+
+  const legacyWatchUrl = value.type === undefined && value.url === undefined ? value.watchUrl : undefined;
+  const type = legacyWatchUrl !== undefined ? 'external' : value.type;
+  const rawUrl = legacyWatchUrl !== undefined ? legacyWatchUrl : value.url;
+  const knownTypes = ['mp4', 'hls', 'embed', 'external', 'trailer'];
+  if (!knownTypes.includes(type)) {
+    throw invalidStreamResponse('Stream provider returned an unknown source type', { type });
+  }
+  if (typeof rawUrl !== 'string' || rawUrl.trim() === '') {
+    throw invalidStreamResponse('Stream provider returned a missing or invalid URL', { type });
+  }
+
+  let url;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw invalidStreamResponse('Stream provider returned a malformed URL', { type });
+  }
+  if (url.protocol !== 'https:') {
+    throw invalidStreamResponse('Stream URLs must use HTTPS', { type, protocol: url.protocol });
+  }
+  if (url.username || url.password) {
+    throw invalidStreamResponse('Stream URLs must not include credentials', { type, hostname: url.hostname });
+  }
+
+  const source = value.source === undefined ? 'stream-provider' : value.source;
+  if (typeof source !== 'string' || source.trim() === '') {
+    throw invalidStreamResponse('Stream provider returned an invalid source name', { source });
+  }
+
+  if (type === 'embed') {
+    const allowedEmbedHosts = normalizeAllowedEmbedHosts(options.allowedEmbedHosts);
+    const hostname = url.hostname.toLowerCase();
+    const allowed = allowedEmbedHosts.some((host) => hostname === host || hostname.endsWith('.' + host));
+    if (!allowed) {
+      throw invalidStreamResponse('Embed URL host is not allowlisted', { hostname });
+    }
+  }
+
+  if (type === 'external' || type === 'trailer') {
+    const defaultLabel = type === 'trailer' ? 'Watch trailer' : 'Watch on official provider';
+    const label = value.label === undefined ? defaultLabel : value.label;
+    if (typeof label !== 'string' || label.trim() === '') {
+      throw invalidStreamResponse('Stream fallback returned an invalid label', { type });
+    }
+    return {
+      playable: false,
+      source: source.trim(),
+      playback: null,
+      fallback: { type, url: url.href, label: label.trim() },
+    };
+  }
+
+  const title = value.title === undefined || value.title === null ? null : value.title;
+  if (title !== null && (typeof title !== 'string' || title.trim() === '')) {
+    throw invalidStreamResponse('Stream provider returned an invalid playback title', { type });
+  }
+  return {
+    playable: true,
+    source: source.trim(),
+    playback: {
+      type,
+      url: url.href,
+      title: title === null ? null : title.trim(),
+    },
+    fallback: null,
+  };
+}
+
+function normalizeOfficialFallbackResult(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)
+      && ['mp4', 'hls', 'embed'].includes(value.type)) {
+    throw streamUnavailable({ type: value.type, source: value.source });
+  }
+  return normalizePlaybackResult(value);
+}
+
 function createRequestSignal(timeout, parentSignal) {
   const hasTimeout = timeout !== undefined && timeout !== false;
   if (!hasTimeout && !parentSignal) {
@@ -286,6 +417,8 @@ class AnimeXYZ {
       throw new TypeError('streamProvider must be a function');
     }
 
+    const allowedEmbedHosts = normalizeAllowedEmbedHosts(options.allowedEmbedHosts);
+
     const suppliedBaseUrl = options.baseUrl;
     this.mode = suppliedBaseUrl ? 'custom' : 'fallback';
     this.baseUrl = String(suppliedBaseUrl || options.niheavenBaseUrl || DEFAULT_NIHEAVEN_BASE_URL).replace(/\/+$/, '');
@@ -295,6 +428,7 @@ class AnimeXYZ {
     this.fallback = options.fallback !== false;
     this.fetch = options.fetch || globalThis.fetch;
     this.streamProvider = options.streamProvider;
+    this.allowedEmbedHosts = allowedEmbedHosts;
     this.headers = { Accept: 'application/json', ...(options.headers || {}) };
 
     if (typeof this.fetch !== 'function') {
@@ -592,7 +726,7 @@ class AnimeXYZ {
 
       try {
         const providerOptions = { ...options, signal: requestSignal.signal };
-        return await this.awaitWithSignal(
+        const value = await this.awaitWithSignal(
           Promise.resolve().then(() => this.streamProvider({
             id: animeId,
             episode: episodeId,
@@ -602,6 +736,7 @@ class AnimeXYZ {
           requestSignal,
           'stream',
         );
+        return normalizePlaybackResult(value, { allowedEmbedHosts: this.allowedEmbedHosts });
       } catch (error) {
         if (error instanceof AnimeXYZError) throw error;
         if (requestSignal.state.timedOut || requestSignal.state.cancelled || error?.name === 'AbortError') {
@@ -624,7 +759,7 @@ class AnimeXYZ {
         {},
         options,
         'custom',
-      );
+      ).then((value) => normalizePlaybackResult(value, { allowedEmbedHosts: this.allowedEmbedHosts }));
     }
 
     return this.requestAt(
@@ -633,12 +768,13 @@ class AnimeXYZ {
       {},
       options,
       'niheaven',
-    );
+    ).then((value) => normalizeOfficialFallbackResult(value));
   }
 }
 
 module.exports = AnimeXYZ;
 module.exports.AnimeXYZ = AnimeXYZ;
 module.exports.AnimeXYZError = AnimeXYZError;
+module.exports.normalizePlaybackResult = normalizePlaybackResult;
 module.exports.DEFAULT_NIHEAVEN_BASE_URL = DEFAULT_NIHEAVEN_BASE_URL;
 module.exports.DEFAULT_JIKAN_BASE_URL = DEFAULT_JIKAN_BASE_URL;
