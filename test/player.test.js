@@ -562,4 +562,6 @@ test('website app wires search results and episode selection to the player', () 
   assert.match(app, /episodeSelect/);
   assert.match(app, /AnimeXYZPlayer/);
   assert.match(app, /AbortController/);
+  assert.match(app, /officialLinks/);
+  assert.match(app, /Open on/);
 });
