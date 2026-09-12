@@ -10,12 +10,12 @@ function json(res, status, body) {
   return res.json(body);
 }
 
-async function request(url, timeoutMs) {
+async function request(url, timeoutMs, headers = { Accept: 'application/json' }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
-      headers: { Accept: 'application/json' },
+      headers,
       signal: controller.signal,
     });
     const text = await response.text();
@@ -95,7 +95,7 @@ module.exports = async function handler(req, res) {
       try {
         const kitsuUrl = KITSU_SEARCH + '?filter%5Btext%5D=' + encodeURIComponent(query)
           + '&page%5Blimit%5D=' + limit;
-        const kitsu = await request(kitsuUrl, 12000);
+        const kitsu = await request(kitsuUrl, 12000, { Accept: 'application/vnd.api+json' });
         return json(res, 200, { data: normalizeKitsu(kitsu), pagination: null, source: 'kitsu' });
       } catch (kitsuError) {
         return json(res, 502, {
