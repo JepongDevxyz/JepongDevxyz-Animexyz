@@ -545,6 +545,7 @@ test('website includes semantic playback controls and ordered scripts', () => {
   assert.deepEqual(sandbox, ['allow-presentation', 'allow-scripts']);
   assert.match(html, /<a[^>]+id=["']officialFallback["']/i);
   assert.match(html, /<button[^>]+id=["']playerRetry["']/i);
+  assert.match(html, /<button[^>]+id=["']legalDemoPlay["']/i);
 
   const configAt = html.indexOf('window.ANIMEXYZ_CONFIG');
   const playerAt = html.indexOf('./player.js');
@@ -564,4 +565,6 @@ test('website app wires search results and episode selection to the player', () 
   assert.match(app, /AbortController/);
   assert.match(app, /officialLinks/);
   assert.match(app, /Open on/);
+  assert.match(app, /legalDemoPlay/);
+  assert.match(app, /sintel-open-movie/);
 });
