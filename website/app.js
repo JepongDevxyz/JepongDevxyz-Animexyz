@@ -12,6 +12,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const resultsList = document.getElementById('searchResults');
   const episodeSelect = document.getElementById('episodeSelect');
   const status = document.getElementById('playerStatus');
+  const legalDemoPlay = document.getElementById('legalDemoPlay');
   if (!form || !queryInput || !resultsList || !episodeSelect || !status || !window.AnimeXYZPlayer) return;
 
   const player = window.AnimeXYZPlayer.createController({
@@ -115,6 +116,11 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   episodeSelect.addEventListener('change', () => {
     if (selected && episodeSelect.value) void player.load(idOf(selected), episodeSelect.value);
+  });
+  legalDemoPlay?.addEventListener('click', () => {
+    selected = null;
+    clearEpisodes();
+    void player.load('sintel-open-movie', 'trailer');
   });
   window.addEventListener('pagehide', () => searchController?.abort(), { once: true });
 });
