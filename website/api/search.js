@@ -31,6 +31,25 @@ async function request(url, timeoutMs) {
   }
 }
 
+function itemsFrom(body) {
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.results)) return body.results;
+  if (Array.isArray(body?.data)) return body.data;
+  return [];
+}
+
+function isRelevant(body, query) {
+  const tokens = query.toLowerCase().split(/\\s+/).filter(Boolean);
+  const items = itemsFrom(body);
+  if (!items.length) return false;
+  return items.some((item) => {
+    const title = String(
+      item?.title || item?.name || item?.title_english || item?.englishTitle || '',
+    ).toLowerCase();
+    return tokens.some((token) => title.includes(token));
+  });
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -48,6 +67,9 @@ module.exports = async function handler(req, res) {
       NIHEAVEN_SEARCH + '?q=' + encodeURIComponent(query) + '&limit=' + limit,
       12000,
     );
+    if (!isRelevant(primary, query)) {
+      throw new Error('Niheaven returned no relevant search results');
+    }
     return json(res, 200, { ...primary, source: 'niheaven' });
   } catch (primaryError) {
     try {
