@@ -27,5 +27,5 @@ test('uses Kitsu when Niheaven is irrelevant and Jikan is unavailable', async ()
   assert.equal(state.status, 200);
   assert.equal(state.body.source, 'kitsu');
   assert.equal(state.body.data[0].title, 'Naruto');
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 3);\n  assert.equal(calls[2].options.headers.Accept, 'application/vnd.api+json');
 });
