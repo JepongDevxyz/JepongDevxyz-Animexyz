@@ -15,6 +15,8 @@ The repository will also include a lightweight responsive demo/docs website for 
 The first release will provide:
 
 - CommonJS support (`require`)
+- Niheaven-primary metadata with Jikan fallback
+- separate Niheaven and MAL identifiers in normalized metadata responses
 - ESM support (`import`)
 - TypeScript declarations
 - Node.js 18+ support using built-in `fetch`
@@ -53,6 +55,9 @@ The constructor will accept optional configuration:
 ```js
 new AnimeXYZ({
   baseUrl,
+  niheavenBaseUrl,
+  jikanBaseUrl,
+  fallback,
   timeout,
   fetch,
   headers,
@@ -64,14 +69,17 @@ new AnimeXYZ({
 
 AnimeXYZ will not hard-code Niheaven's private deployment as its required backend.
 
-For discovery and metadata, the client will target a configurable AnimeXYZ-compatible backend. The default package design will keep `baseUrl` configurable so the client can be pointed at a legal/public metadata service or a future AnimeXYZ backend without changing the package API.
+For discovery and metadata, the client tries the configurable Niheaven endpoint first and falls back to the configurable Jikan REST API v4 endpoint. `info()` keeps a local diagnostic fallback because Jikan has no equivalent service-info route. Supplying `baseUrl` keeps the existing single AnimeXYZ-compatible backend mode. The default upstream URLs remain configurable so the client can be pointed at a legal/public metadata service without changing the package API.
 
-The package will not ship code intended to bypass access controls or extract unauthorized direct media URLs.
+The package will not ship code intended to bypass access controls or extract unauthorized direct media URLs. Metadata responses expose separate `niheavenId` and `malId` fields plus a `source` marker.
+
+For search methods, a non-empty Niheaven response must contain at least one title relevant to the normalized query. Otherwise the response is classified as `INVALID_PROVIDER_RESPONSE` and the client tries Jikan with safe-content filtering.
 
 `stream()` will use either:
 
 1. an explicitly configured `streamProvider` function supplied by the package user, or
-2. an AnimeXYZ-compatible backend response containing authorized provider/watch links.
+2. the Niheaven stream route in the default mode, or
+3. an AnimeXYZ-compatible backend response in custom `baseUrl` mode.
 
 This keeps the public method stable while separating metadata from provider-specific streaming logic.
 
@@ -83,8 +91,9 @@ A single internal request method will:
 - append query parameters safely
 - send GET requests with `Accept: application/json`
 - support request-level headers
-- support `AbortSignal`
-- enforce a configurable timeout
+- support `AbortSignal` cancellation
+- enforce a configurable timeout while preserving caller cancellation
+- skip metadata fallback when the caller cancels
 - parse JSON responses when possible
 - preserve text responses when JSON parsing is not possible
 - throw `AnimeXYZError` on network and HTTP failures
@@ -118,6 +127,10 @@ Expected codes include:
 - `API_ERROR`
 - `NETWORK_ERROR`
 - `TIMEOUT`
+- `ABORTED`
+- `FALLBACK_FAILED`
+- `FALLBACK_UNAVAILABLE`
+- `INVALID_PROVIDER_RESPONSE`
 - `HTTP_<status>`
 - `STREAM_PROVIDER_ERROR`
 
@@ -275,6 +288,6 @@ The first implementation is complete when:
 5. TypeScript declarations match the public API
 6. README examples match the implemented methods
 7. CI configuration is valid and runs the same verification commands
-8. no package code is hard-dependent on Niheaven's API endpoint
+8. Niheaven is the default metadata primary and Jikan is the default metadata fallback, with both endpoints configurable
 9. the demo/docs website renders responsively without overlapping content
 10. the website displays `Powered by Jepong Devxyz` on every fresh page open or reload and auto-dismisses without blocking interaction

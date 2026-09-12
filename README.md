@@ -2,7 +2,7 @@
 
 AnimeXYZ is a Node.js 18+ anime API client by **Jepong Devxyz**. It supports CommonJS, ESM, TypeScript declarations, configurable request settings, and an optional authorized `streamProvider` integration.
 
-By default, AnimeXYZ maps its metadata methods to the public Jikan REST API v4. If you pass a custom `baseUrl`, the client switches to the AnimeXYZ-compatible route contract documented below.
+By default, AnimeXYZ tries the Niheaven API first and falls back to Jikan REST API v4 for metadata when the primary request fails. If you pass a custom `baseUrl`, the client switches to the AnimeXYZ-compatible route contract documented below.
 
 ## Installation
 
@@ -34,8 +34,10 @@ console.log(popular);
 
 ```js
 const api = new AnimeXYZ({
-  baseUrl: 'https://your-api.example/v1',
+  niheavenBaseUrl: 'https://nimeheaven.vercel.app/api/v1',
+  jikanBaseUrl: 'https://api.jikan.moe/v4',
   timeout: 15000,
+  fallback: true,
   headers: {
     'X-App': 'my-anime-app',
   },
@@ -44,17 +46,21 @@ const api = new AnimeXYZ({
 
 Available options:
 
-- `baseUrl` — optional AnimeXYZ-compatible backend. If omitted, Jikan REST API v4 is used for metadata.
+- `baseUrl` — optional AnimeXYZ-compatible backend. Supplying it enables the legacy single-backend route contract.
+- `niheavenBaseUrl` — Niheaven primary endpoint; defaults to `https://nimeheaven.vercel.app/api/v1`.
+- `jikanBaseUrl` — Jikan metadata fallback endpoint; defaults to `https://api.jikan.moe/v4`.
+- `fallback` — set to `false` to return the Niheaven error without trying Jikan.
 - `timeout` — request timeout in milliseconds, or `false` to disable the built-in timeout.
 - `fetch` — custom fetch implementation, useful for tests or alternate runtimes.
 - `headers` — headers included with every request.
 - `streamProvider` — optional function for an authorized watch-provider integration.
+- `allowedEmbedHosts` — hostnames allowed for authorized `embed` playback sources.
 
 ## Available methods
 
 ### `info()`
 
-Returns local AnimeXYZ/backend information when using the default Jikan backend. With a custom backend it requests `/info`.
+Returns AnimeXYZ/provider information. With a custom backend it requests `/info`.
 
 ```js
 const info = await api.info();
@@ -62,7 +68,7 @@ const info = await api.info();
 
 ### `home(options)`
 
-Returns the current-season listing on the default backend.
+Returns the current-season listing from Niheaven, with Jikan metadata fallback.
 
 ```js
 const home = await api.home({ page: 1, limit: 10 });
@@ -70,7 +76,7 @@ const home = await api.home({ page: 1, limit: 10 });
 
 ### `newEpisodes(options)`
 
-Returns the current airing schedule on the default backend.
+Returns the current airing schedule from Niheaven, with Jikan metadata fallback.
 
 ```js
 const schedule = await api.newEpisodes({ page: 1, limit: 10 });
@@ -78,7 +84,7 @@ const schedule = await api.newEpisodes({ page: 1, limit: 10 });
 
 ### `popular(options)`
 
-Returns top anime on the default backend.
+Returns top anime from Niheaven, with Jikan metadata fallback.
 
 ```js
 const popular = await api.popular({ page: 1, limit: 10 });
@@ -89,6 +95,17 @@ const popular = await api.popular({ page: 1, limit: 10 });
 ```js
 const results = await api.search('one piece', { page: 1, limit: 10 });
 ```
+
+AnimeXYZ checks that a non-empty Niheaven result contains a title relevant to the query. An unrelated successful response is treated as `INVALID_PROVIDER_RESPONSE` and falls back to Jikan. Jikan search fallback requests use its safe-content filter.
+
+Metadata responses include `source` and separate `niheavenId`/`malId` fields. List responses decorate each item in `results` or `data`; detail responses decorate the returned `data` object when the upstream uses a Jikan envelope. For a detail request, pass both IDs when possible so a Niheaven failure can use the matching MAL ID for the Jikan fallback.
+
+```js
+const detail = await api.anime({ niheavenId: 'nh-anime-id', malId: 20 });
+const malDetail = await api.anime({ malId: 20 });
+```
+
+If a Niheaven-only detail request fails, AnimeXYZ does not send the Niheaven ID to Jikan as if it were a MAL ID; the combined error includes `FALLBACK_UNAVAILABLE` in its fallback details.
 
 ### `fastSearch(query, options)`
 
@@ -108,16 +125,23 @@ const season = await api.season('2026fall', { page: 1, limit: 10 });
 
 ### `anime(id)`
 
+String IDs are treated as Niheaven IDs, positive numeric IDs as MAL IDs, and identifier objects can carry either or both IDs.
+
 ```js
-const anime = await api.anime('20');
+const anime = await api.anime({ niheavenId: 'nh-anime-id', malId: 20 });
 ```
 
 ### `stream(id, episode)`
 
-With the default backend, this returns known streaming-platform links for the anime and includes `requestedEpisode` in the result. It does not bypass DRM or extract unauthorized direct media URLs.
+With an explicit authorized `streamProvider` or custom backend, this returns a normalized playback result. Supported playback types are `mp4`, browser-native `hls`, and allowlisted `embed`. Default Niheaven direct media responses are not treated as authorized playback; they must provide an official external or trailer fallback.
 
 ```js
-const providers = await api.stream('20', 1);
+const providers = await api.stream('nh-anime-id', 1);
+if (providers.playable) {
+  console.log(providers.playback.type, providers.playback.url);
+} else {
+  console.log(providers.fallback.label, providers.fallback.url);
+}
 ```
 
 ## Custom stream provider
@@ -126,15 +150,18 @@ Use `streamProvider` when your application already has an authorized provider in
 
 ```js
 const api = new AnimeXYZ({
+  allowedEmbedHosts: ['player.example'],
   streamProvider: async ({ id, episode }) => ({
-    watchUrl: `https://your-authorized-provider.example/watch/${id}/${episode}`,
+    source: 'authorized-provider',
+    type: 'mp4',
+    url: `https://media.your-authorized-provider.example/${id}/${episode}.mp4`,
   }),
 });
 
 const stream = await api.stream('20', 1);
 ```
 
-If the provider throws a regular error, AnimeXYZ wraps it in `AnimeXYZError` with code `STREAM_PROVIDER_ERROR`.
+The provider receives the composed `AbortSignal`, so the client timeout and caller cancellation also stop a provider that observes the signal. If the provider ignores the signal, AnimeXYZ still rejects at the configured deadline. A regular provider error is wrapped in `AnimeXYZError` with code `STREAM_PROVIDER_ERROR`.
 
 ## Custom AnimeXYZ-compatible backend
 
@@ -168,7 +195,7 @@ try {
 }
 ```
 
-Common codes include `NETWORK_ERROR`, `TIMEOUT`, `HTTP_<status>`, and `STREAM_PROVIDER_ERROR`.
+Common codes include `NETWORK_ERROR`, `TIMEOUT`, `ABORTED`, `HTTP_<status>`, `INVALID_PROVIDER_RESPONSE`, `INVALID_STREAM_RESPONSE`, `STREAM_UNAVAILABLE`, `FALLBACK_FAILED`, `FALLBACK_UNAVAILABLE`, and `STREAM_PROVIDER_ERROR`. A caller-provided `AbortSignal` cancels the active request and prevents metadata fallback.
 
 ## TypeScript
 
@@ -181,7 +208,7 @@ const results = await api.search('naruto', { page: 1, limit: 10 });
 
 ## Demo website
 
-A framework-free responsive demo/docs website lives in `website/`.
+A framework-free responsive demo/player website lives in `website/`. Configure `window.ANIMEXYZ_CONFIG.apiBase` for an AnimeXYZ-compatible backend. The player attaches media only after HTTPS, source-type, and embed-host validation. Browsers without native HLS support receive an official-link fallback or a clear error.
 
 Opening or reloading the page displays the toast:
 
